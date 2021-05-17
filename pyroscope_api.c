@@ -11,7 +11,6 @@ pyroscope_context_t *first_ctx = NULL;
 pyroscope_context_t *allocate_context() {
   if (NULL == first_ctx) {
     first_ctx = calloc(sizeof(pyroscope_context_t), 1);
-    first_ctx->prev = NULL;
     return first_ctx;
   }
 
