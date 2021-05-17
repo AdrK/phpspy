@@ -67,8 +67,8 @@ void get_process_cwd(char *app_cwd, pid_t pid) {
   }
 }
 
-int parse_output(struct trace_context_s *context, const char *app_root_dir,
-                 char *data_ptr, int data_len, void *err_ptr, int err_len) {
+int formulate_output(struct trace_context_s *context, const char *app_root_dir,
+                     char *data_ptr, int data_len, void *err_ptr, int err_len) {
   int written = 0;
   const int nof_frames = context->event.frame.depth;
 
@@ -88,15 +88,20 @@ int parse_output(struct trace_context_s *context, const char *app_root_dir,
     }
 
     if (loc->lineno == -1) {
-      char out_fmt[] = "%s - %s%s%s; ";
+      char out_fmt[] = "%s - %s%s%s";
       written += snprintf(write_cursor, data_len, out_fmt,
                           &loc->file[file_path_beginning], loc->class_name,
                           loc->class_len ? "::" : "", loc->func);
     } else {
-      char out_fmt[] = "%s:%d - %s%s%s; ";
+      char out_fmt[] = "%s:%d - %s%s%s";
       written += snprintf(
           write_cursor, data_len, out_fmt, &loc->file[file_path_beginning],
           loc->lineno, loc->class_name, loc->class_len ? "::" : "", loc->func);
+    }
+
+    if (current_frame_idx != 0) {
+      write_cursor += written;
+      written += snprintf(write_cursor, 2, ";");
     }
 
     if (written > data_len) {
@@ -173,9 +178,9 @@ int phpspy_snapshot(pid_t pid, void *ptr, int len, void *err_ptr, int err_len) {
      formulate_error_msg(do_trace(&pyroscope_context->phpspy_context),
                          &pyroscope_context->phpspy_context, err_ptr, err_len));
 
-  int written = parse_output(&pyroscope_context->phpspy_context,
-                             &pyroscope_context->app_root_dir[0], ptr, len,
-                             err_ptr, err_len);
+  int written = formulate_output(&pyroscope_context->phpspy_context,
+                                 &pyroscope_context->app_root_dir[0], ptr, len,
+                                 err_ptr, err_len);
 
   return written;
 }
