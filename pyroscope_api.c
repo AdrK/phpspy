@@ -1,21 +1,61 @@
 #include "pyroscope_api.h"
+#include "pyroscope_api_struct.h"
 #include <unistd.h>
 
 /* TODO This is done in the same way in phpspy, so until they fix it, it has to
  * stay like it is */
 #include "phpspy.c"
 
-#define MAX_STACK_DEPTH 64
-#define MAX_PIDS 32
+pyroscope_context_t *first_ctx = NULL;
 
-typedef struct pyroscope_context_t {
-  pid_t pid;
-  char app_root_dir[PATH_MAX];
-  trace_frame_t frames[MAX_STACK_DEPTH];
-  struct trace_context_s phpspy_context;
-} pyroscope_context_t;
+pyroscope_context_t *allocate_context() {
+  if (NULL == first_ctx) {
+    first_ctx = calloc(sizeof(pyroscope_context_t), 1);
+    first_ctx->prev = NULL;
+    return first_ctx;
+  }
 
-pyroscope_context_t pyroscope_contexts[MAX_PIDS];
+  pyroscope_context_t *current = first_ctx;
+  while (1) {
+    if (NULL == current->next) {
+      current->next = calloc(sizeof(pyroscope_context_t), 1);
+      current->next->prev = current;
+      return current->next;
+    } else {
+      current = current->next;
+    }
+  }
+}
+
+void deallocate_context(pyroscope_context_t *ctx) {
+  if (NULL != ctx->prev) {
+    ctx->prev->next = ctx->next;
+  } else {
+    first_ctx = ctx->next;
+  }
+
+  if (NULL != ctx->next) {
+    ctx->next->prev = ctx->prev;
+  }
+
+  free(ctx);
+}
+
+pyroscope_context_t *find_matching_context(pid_t pid) {
+  pyroscope_context_t *ctx = first_ctx;
+
+  while (1) {
+    if (NULL == ctx) {
+      return NULL;
+    }
+
+    if (ctx->pid == pid) {
+      return ctx;
+    } else {
+      ctx = ctx->next;
+    }
+  }
+}
 
 int event_handler(struct trace_context_s *context, int event_type) {
   switch (event_type) {
@@ -114,37 +154,11 @@ int formulate_output(struct trace_context_s *context, const char *app_root_dir,
   return written;
 }
 
-pyroscope_context_t *find_first_free_context() {
-  for (int i = 0; i < MAX_PIDS; i++) {
-    if (pyroscope_contexts[i].pid == 0) {
-      return &pyroscope_contexts[i];
-    }
-  }
-  return NULL;
-}
-
-pyroscope_context_t *find_matching_context(pid_t pid) {
-  for (int i = 0; i < MAX_PIDS; i++) {
-    if (pyroscope_contexts[i].pid == pid) {
-      return &pyroscope_contexts[i];
-    }
-  }
-  return NULL;
-}
-
 int phpspy_init(pid_t pid, void *err_ptr, int err_len) {
   int rv = 0;
   opt_max_stack_depth = MAX_STACK_DEPTH;
 
-  /* TODO: Go dynamic. Linked list? */
-  pyroscope_context_t *pyroscope_context = find_first_free_context();
-
-  if (NULL == pyroscope_context) {
-    int err_msg_len =
-        snprintf((char *)err_ptr, err_len,
-                 "Exceeded maximum allowed number of processes: %d", MAX_PIDS);
-    return -err_msg_len;
-  }
+  pyroscope_context_t *pyroscope_context = allocate_context();
 
   memset(pyroscope_context, 0, sizeof(pyroscope_context_t));
   pyroscope_context->pid = pid;
@@ -186,15 +200,15 @@ int phpspy_snapshot(pid_t pid, void *ptr, int len, void *err_ptr, int err_len) {
 }
 
 int phpspy_cleanup(pid_t pid, void *err_ptr, int err_len) {
-  pyroscope_context_t *pyroscope_context = find_matching_context(pid);
+  pyroscope_context_t *current = find_matching_context(pid);
 
-  if (NULL == pyroscope_context) {
+  if (NULL == current) {
     int err_msg_len = snprintf((char *)err_ptr, err_len,
                                "Phpspy not initialized for %d pid", pid);
     return -err_msg_len;
   }
 
-  memset(pyroscope_context, 0, sizeof(pyroscope_context_t));
+  deallocate_context(current);
 
   return 0;
 }
