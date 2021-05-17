@@ -366,7 +366,7 @@ TEST_F(PyroscopeApiTestsParseOutput, formulate_output_not_enough_space) {
 
 class PyroscopeApiTestsProfiling : public PyroscopeApiTestsSingleApp {
 public:
-  static constexpr float loops = 50; // TODO: Cannot exceed MAX_PIDS
+  static constexpr float loops = 1024;
 
   uint64_t estimate_tsc_freq(void) {
     uint64_t start = rte_rdtsc();
