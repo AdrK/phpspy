@@ -1,8 +1,8 @@
 #!/bin/bash
 
-./tests/pyroscope_api/main.php &
+./tests/pyroscope_api/main.php&
 pid_1=$!
-./tests/pyroscope_api/main_chdir.php &
+./tests/pyroscope_api/main_chdir.php&
 pid_2=$!
 
 #valgrind --leak-check=full --show-leak-kinds=all
